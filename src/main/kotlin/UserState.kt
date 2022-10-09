@@ -1,11 +1,15 @@
 data class UserState(
-    var weekPostsList: ArrayList<Post>,
-    var weekPostsPage: Int,
-    var weekPostsMessageId: Long,
-    var trendPostsList: ArrayList<Post>,
-    var trendPostsPage: Int,
-    var trendPostsMessageId: Long,
-    var insightPostsList: ArrayList<Post>,
-    var insightPostsPage: Int,
-    var insightPostsMessageId: Long
+    var token: String = "",
+    var status: Status = Status.NOT_AUTHORIZED,
+    var authStatus: AuthRegStatus = AuthRegStatus.NONE,
+    var email: String = "",
+    var weekPostsList: ArrayList<Post> = arrayListOf(),
+    var weekPostsPage: Int = 0,
+    var weekPostsMessageId: Long = 0L,
+    var trendPostsList: ArrayList<Post> = arrayListOf(),
+    var trendPostsPage: Int = 0,
+    var trendPostsMessageId: Long = 0L,
+    var insightPostsList: ArrayList<Post>  = arrayListOf(),
+    var insightPostsPage: Int = 0,
+    var insightPostsMessageId: Long = 0L
 )

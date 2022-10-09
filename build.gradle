@@ -14,6 +14,7 @@ repositories {
 dependencies {
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
     implementation 'io.github.kotlin-telegram-bot.kotlin-telegram-bot:telegram:6.0.7'
+    implementation 'org.danilopianini:khttp:1.2.3'
 }
 
 test {

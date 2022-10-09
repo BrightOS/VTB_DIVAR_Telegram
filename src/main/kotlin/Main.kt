@@ -9,6 +9,7 @@ import com.github.kotlintelegrambot.entities.KeyboardReplyMarkup
 import com.github.kotlintelegrambot.entities.ParseMode
 import com.github.kotlintelegrambot.entities.keyboard.InlineKeyboardButton
 import com.github.kotlintelegrambot.entities.keyboard.KeyboardButton
+import khttp.structures.authorization.Authorization
 
 private const val API_TOKEN = "5635376755:AAGnKRpLl_h3Xqr1EeEhy1th4dzsrxmfLjI"
 
@@ -17,8 +18,22 @@ private const val TRENDS = "Тренды"
 private const val INSIGHTS = "Инсайты"
 
 private const val POSTS_ON_PAGE = 2
+private const val HOST = "https://divarteam.ru/v1"
 
 private val usersStateMap = mutableMapOf<Long, UserState>()
+
+enum class Status {
+    NOT_AUTHORIZED,
+    WAITING_FOR_EMAIL,
+    WAITING_FOR_CODE,
+    AUTHORIZED
+}
+
+enum class AuthRegStatus {
+    AUTH,
+    REG,
+    NONE
+}
 
 fun main() {
     val bot = bot {
@@ -30,28 +45,118 @@ fun main() {
             }
 
             text {
-                println("${ChatId.fromId(message.chat.id)} -> $text")
+                if (usersStateMap[message.chat.id] == null)
+                    usersStateMap[message.chat.id] = UserState()
 
-                when (text) {
-                    WEEK_NEWS -> getWeekNews(bot, message.chat.id)
-                    TRENDS -> getTrends(bot, message.chat.id)
-                    INSIGHTS -> getInsights(bot, message.chat.id)
-                    else -> {
-                        val keyboardMarkup =
-                            KeyboardReplyMarkup(keyboard = generateUsersButton(), resizeKeyboard = true)
+                val currentUser = usersStateMap[message.chat.id]!!
 
-                        if (usersStateMap.keys.contains(message.chat.id).not()) {
-                            bot.sendMessage(
-                                chatId = ChatId.fromId(message.chat.id),
-                                text = "Авторизация прошла успешно.",
-                                replyMarkup = keyboardMarkup
-                            )
+                when (currentUser.status) {
 
-                            usersStateMap[message.chat.id] = UserState(
-                                weekPostsList = arrayListOf(), weekPostsPage = 0, weekPostsMessageId = 0,
-                                trendPostsList = arrayListOf(), trendPostsPage = 0, trendPostsMessageId = 0,
-                                insightPostsList = arrayListOf(), insightPostsPage = 0, insightPostsMessageId = 0
-                            )
+
+                    Status.NOT_AUTHORIZED -> {
+                        bot.sendMessage(
+                            ChatId.fromId(message.chat.id),
+                            "Отправьте следующим сообщением почту для аутентификации"
+                        )
+                        currentUser.status = Status.WAITING_FOR_EMAIL
+                    }
+
+
+                    Status.WAITING_FOR_EMAIL -> {
+                        currentUser.email = text
+                        // Отправить письмо на почту
+                        // headers = mapOf("Authorization" to "Bearer ${currentUser.token}")
+                        val r = khttp.get(url = "$HOST/reg.send_code", params = mapOf("email" to text))
+                        when (r.statusCode) {
+                            200 -> {
+                                bot.sendMessage(
+                                    ChatId.fromId(message.chat.id),
+                                    "Вам на почту был отправлен четырёхзначный код. Отправьте его следующим сообщением."
+                                )
+                                currentUser.email = text
+                                currentUser.authStatus = AuthRegStatus.REG
+                                currentUser.status = Status.WAITING_FOR_CODE
+                            }
+
+                            400 -> {
+                                val r2 = khttp.get(url = "$HOST/auth.send_code", params = mapOf("email" to text))
+                                when (r2.statusCode) {
+                                    200 -> {
+                                        bot.sendMessage(
+                                            ChatId.fromId(message.chat.id),
+                                            "Вам на почту был отправлен четырёхзначный код. Отправьте его следующим сообщением."
+                                        )
+                                        currentUser.email = text
+                                        currentUser.status = Status.WAITING_FOR_CODE
+                                        currentUser.authStatus = AuthRegStatus.AUTH
+                                    }
+
+                                    else -> {
+                                        println(r.statusCode)
+                                        bot.sendMessage(
+                                            ChatId.fromId(message.chat.id),
+                                            "Произошла ошибка. Повторите попытку снова."
+                                        )
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                println(r.statusCode)
+                                bot.sendMessage(
+                                    ChatId.fromId(message.chat.id),
+                                    "Произошла ошибка. Повторите попытку снова."
+                                )
+                            }
+                        }
+                    }
+
+
+                    Status.WAITING_FOR_CODE -> {
+                        // Отправка регистрации
+                        val r = if (currentUser.authStatus == AuthRegStatus.REG)
+                            khttp.post(url = "$HOST/reg", params = mapOf("email" to currentUser.email, "code" to text))
+                        else
+                            khttp.get(url = "$HOST/auth", params = mapOf("email" to currentUser.email, "code" to text))
+
+                        println(r.text)
+
+                        when (r.statusCode) {
+                            200, 201 -> {
+                                val keyboardMarkup =
+                                    KeyboardReplyMarkup(keyboard = generateUsersButton(), resizeKeyboard = true)
+
+                                bot.sendMessage(
+                                    chatId = ChatId.fromId(message.chat.id),
+                                    text = "Авторизация прошла успешно!",
+                                    replyMarkup = keyboardMarkup
+                                )
+                                currentUser.status = Status.AUTHORIZED
+                            }
+
+                            else -> {
+                                bot.sendMessage(
+                                    ChatId.fromId(message.chat.id),
+                                    "Произошла ошибка. Повторите попытку снова."
+                                )
+                                println(r.statusCode)
+                            }
+                        }
+                    }
+
+
+                    Status.AUTHORIZED -> {
+                        println("${ChatId.fromId(message.chat.id)} -> $text")
+
+                        when (text) {
+                            WEEK_NEWS ->
+                                getWeekNews(bot, message.chat.id)
+
+                            TRENDS ->
+                                getTrends(bot, message.chat.id)
+
+                            INSIGHTS ->
+                                getInsights(bot, message.chat.id)
                         }
                     }
                 }
